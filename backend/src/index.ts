@@ -44,7 +44,7 @@ app.get('/make-question', async (req, res) => {
 })
 
 app.get('/generate', async (req, res) => {
-  const { question, querys } = req.query as { question: string, querys: string }
+  const { question, querys, age, gender } = req.query as { question: string, querys: string, age: string, gender: string }
 
   // 搜索
   let searchResults = ''
@@ -61,12 +61,12 @@ app.get('/generate', async (req, res) => {
   const outlineBot = ling.createBot('outline')
 
   quickAnswerBot.addPrompt(quickAnswerPrompt, {
-    gender: 'female',
-    age: 6,
+    gender: gender || 'female',
+    age: age ? parseInt(age) : 6,
   })
   outlineBot.addPrompt(outlinePrompt, {
-    gender: 'female',
-    age: 6,
+    gender: gender || 'female',
+    age: age ? parseInt(age) : 6,
   })
 
   outlineBot.addFilter('image-prompt')

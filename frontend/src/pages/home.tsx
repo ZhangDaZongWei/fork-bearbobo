@@ -4,6 +4,8 @@ import { marked } from 'marked'
 
 export default function Home() {
   const [query, setQuery] = useState('')
+  const [age, setAge] = useState(8)
+  const [gender, setGender] = useState<'male' | 'female'>('female')
   const [questions, setQuestions] = useState<{ questions: { question: string, query: string[] }[]}>({
     questions: [],
   })
@@ -56,7 +58,7 @@ export default function Home() {
     setQuickAnswer('')
     const questionItem = questions.questions.find(it => it.question === question)
     const querys = questionItem?.query.join(';') || ''
-    const eventSource = new EventSource(`/api/generate?question=${question}&querys=${querys}`)
+    const eventSource = new EventSource(`/api/generate?question=${question}&querys=${querys}&age=${age}&gender=${gender}`)
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.uri.includes('quick-answer')) {
@@ -87,6 +89,23 @@ export default function Home() {
 
   return (
     <div>
+      <div>
+        <label>
+          年龄：
+          <select value={age} onChange={e => setAge(Number(e.target.value))}>
+            {[6, 7, 8, 9, 10, 11, 12].map(n => (
+              <option key={n} value={n}>{n} 岁</option>
+            ))}
+          </select>
+        </label>
+        <label style={{ marginLeft: '16px' }}>
+          性别：
+          <select value={gender} onChange={e => setGender(e.target.value as 'male' | 'female')}>
+            <option value="female">女生</option>
+            <option value="male">男生</option>
+          </select>
+        </label>
+      </div>
       <input type="text" value={query} onChange={e => setQuery(e.target.value)} />
       <button onClick={handleSearch}>Search</button>
       <div>
