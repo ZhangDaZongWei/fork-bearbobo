@@ -19,7 +19,17 @@ type HistoryItem = {
 
 function loadHistory(): HistoryItem[] {
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+    const data = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+    if (!Array.isArray(data)) return []
+    return data.filter(
+      (item): item is HistoryItem =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof item.id === 'number' &&
+        typeof item.question === 'string' &&
+        typeof item.quickAnswer === 'string' &&
+        Array.isArray(item.outline?.topics),
+    )
   } catch {
     return []
   }
@@ -98,20 +108,23 @@ export default function Home() {
       }
 
       if (data.uri.includes('outline')) {
+        const outlineNext = JSON.parse(JSON.stringify(finalOutline))
+        const content = get({ outline: outlineNext }, data.uri)
+        set({ outline: outlineNext }, data.uri, (content || '') + data.delta)
+        finalOutline = outlineNext
         setOutline(prev => {
           const next = JSON.parse(JSON.stringify(prev));
-          const content = get(next, data.uri);
-          set(next, data.uri, (content || '') + data.delta);
-          finalOutline = next.outline
+          const c = get(next, data.uri);
+          set(next, data.uri, (c || '') + data.delta);
           return next;
         });
       }
 
       if (data.uri.includes('cover_image')) {
+        finalOutline = { ...finalOutline, cover_image: data.delta }
         setOutline(prev => {
           const next = JSON.parse(JSON.stringify(prev));
           set(next, 'outline/cover_image', data.delta);
-          finalOutline = next.outline
           return next;
         });
       }
@@ -136,6 +149,7 @@ export default function Home() {
   const handleRestoreHistory = (item: HistoryItem) => {
     setQuickAnswer(item.quickAnswer)
     setOutline({ outline: item.outline })
+    setQuestions({ questions: [] })
   }
 
   const handleDeleteHistory = (id: number) => {
