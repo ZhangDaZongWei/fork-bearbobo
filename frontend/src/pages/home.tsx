@@ -2,10 +2,52 @@ import { useState } from 'react'
 import { get, set } from 'jsonuri'
 import { marked } from 'marked'
 
+const HISTORY_KEY = 'bearbobo_history'
+
+type HistoryItem = {
+  id: number
+  question: string
+  quickAnswer: string
+  outline: {
+    question: string
+    topics: { topic: string }[]
+    introduction: string
+    cover_image: string
+  }
+  createdAt: string
+}
+
+function loadHistory(): HistoryItem[] {
+  try {
+    const data = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+    if (!Array.isArray(data)) return []
+    return data.filter(
+      (item): item is HistoryItem =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof item.id === 'number' &&
+        typeof item.question === 'string' &&
+        typeof item.quickAnswer === 'string' &&
+        Array.isArray(item.outline?.topics),
+    )
+  } catch {
+    return []
+  }
+}
+
+function saveHistory(items: HistoryItem[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(items))
+  } catch {
+    // QuotaExceededError 等存储异常，静默跳过持久化
+  }
+}
+
 export default function Home() {
   const [query, setQuery] = useState('')
   const [age, setAge] = useState(8)
   const [gender, setGender] = useState<'male' | 'female'>('female')
+  const [history, setHistory] = useState<HistoryItem[]>(loadHistory)
   const [questions, setQuestions] = useState<{ questions: { question: string, query: string[] }[]}>({
     questions: [],
   })
@@ -56,25 +98,34 @@ export default function Home() {
 
   const handleQuickAnswer = async (question: string) => {
     setQuickAnswer('')
+    setOutline({ outline: { question: '', topics: [], introduction: '', cover_image: '' } })
     const questionItem = questions.questions.find(it => it.question === question)
     const querys = questionItem?.query.join(';') || ''
+    let finalQuickAnswer = ''
+    let finalOutline = { question: '', topics: [] as { topic: string }[], introduction: '', cover_image: '' }
     const eventSource = new EventSource(`/api/generate?question=${question}&querys=${querys}&age=${age}&gender=${gender}`)
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.uri.includes('quick-answer')) {
+        finalQuickAnswer += data.delta
         setQuickAnswer(prev => prev + data.delta);
       }
 
       if (data.uri.includes('outline')) {
+        const outlineNext = JSON.parse(JSON.stringify(finalOutline))
+        const content = get({ outline: outlineNext }, data.uri)
+        set({ outline: outlineNext }, data.uri, (content || '') + data.delta)
+        finalOutline = outlineNext
         setOutline(prev => {
           const next = JSON.parse(JSON.stringify(prev));
-          const content = get(next, data.uri);
-          set(next, data.uri, (content || '') + data.delta);
+          const c = get(next, data.uri);
+          set(next, data.uri, (c || '') + data.delta);
           return next;
         });
       }
 
       if (data.uri.includes('cover_image')) {
+        finalOutline = { ...finalOutline, cover_image: data.delta }
         setOutline(prev => {
           const next = JSON.parse(JSON.stringify(prev));
           set(next, 'outline/cover_image', data.delta);
@@ -83,7 +134,33 @@ export default function Home() {
       }
     }
     eventSource.addEventListener('finished', () => {
-      eventSource.close();
+      eventSource.close()
+      const item: HistoryItem = {
+        id: Date.now(),
+        question,
+        quickAnswer: finalQuickAnswer,
+        outline: finalOutline,
+        createdAt: new Date().toLocaleString('zh-CN'),
+      }
+      setHistory(prev => {
+        const next = [item, ...prev].slice(0, 20)
+        saveHistory(next)
+        return next
+      })
+    })
+  }
+
+  const handleRestoreHistory = (item: HistoryItem) => {
+    setQuickAnswer(item.quickAnswer)
+    setOutline({ outline: item.outline })
+    setQuestions({ questions: [] })
+  }
+
+  const handleDeleteHistory = (id: number) => {
+    setHistory(prev => {
+      const next = prev.filter(it => it.id !== id)
+      saveHistory(next)
+      return next
     })
   }
 
@@ -136,6 +213,32 @@ export default function Home() {
               <img style={{ width: '500px', height: '400px' }} src={outline.outline.cover_image} alt="cover" />
             )}
             <div dangerouslySetInnerHTML={{ __html: marked.parse(outline.outline.introduction) }} />
+          </div>
+        )
+      }
+      {
+        history.length > 0 && (
+          <div>
+            <h3>历史记录</h3>
+            <ul>
+              {history.map(item => (
+                <li key={item.id} style={{ marginBottom: '8px' }}>
+                  <span
+                    style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => handleRestoreHistory(item)}
+                  >
+                    {item.question}
+                  </span>
+                  <span style={{ marginLeft: '8px', color: '#999', fontSize: '12px' }}>{item.createdAt}</span>
+                  <button
+                    style={{ marginLeft: '8px' }}
+                    onClick={() => handleDeleteHistory(item.id)}
+                  >
+                    删除
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )
       }
