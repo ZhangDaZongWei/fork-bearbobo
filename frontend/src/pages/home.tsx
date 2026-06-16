@@ -36,7 +36,11 @@ function loadHistory(): HistoryItem[] {
 }
 
 function saveHistory(items: HistoryItem[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(items))
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(items))
+  } catch {
+    // QuotaExceededError 等存储异常，静默跳过持久化
+  }
 }
 
 export default function Home() {
