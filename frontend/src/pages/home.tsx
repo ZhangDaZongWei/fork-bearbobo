@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { get, set } from 'jsonuri'
 import { marked } from 'marked'
 
@@ -53,6 +53,8 @@ export default function Home() {
   })
   const [searchError, setSearchError] = useState('')
   const [generateError, setGenerateError] = useState('')
+  const searchSourceRef = useRef<EventSource | null>(null)
+  const generateSourceRef = useRef<EventSource | null>(null)
   const [quickAnswer, setQuickAnswer] = useState('')
   const [outline, setOutline] = useState<{
     outline: {
@@ -71,9 +73,11 @@ export default function Home() {
   })
 
   const handleSearch = async () => {
+    searchSourceRef.current?.close()
     setSearchError('')
     setQuestions({ questions: [] })
     const eventSource = new EventSource('/api/make-question?question=' + encodeURIComponent(query))
+    searchSourceRef.current = eventSource
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
       const { uri, delta } = data;
@@ -92,8 +96,10 @@ export default function Home() {
       });
     }
     eventSource.onerror = () => {
-      setSearchError('问题拆解失败，请检查网络后重试')
-      eventSource.close()
+      if (eventSource.readyState === EventSource.CLOSED) {
+        setSearchError('问题拆解失败，请检查网络后重试')
+        eventSource.close()
+      }
     }
     eventSource.addEventListener('finished', () => {
       eventSource.close();
@@ -101,6 +107,7 @@ export default function Home() {
   }
 
   const handleQuickAnswer = async (question: string) => {
+    generateSourceRef.current?.close()
     setGenerateError('')
     setQuickAnswer('')
     setOutline({ outline: { question: '', topics: [], introduction: '', cover_image: '' } })
@@ -109,6 +116,7 @@ export default function Home() {
     let finalQuickAnswer = ''
     let finalOutline = { question: '', topics: [] as { topic: string }[], introduction: '', cover_image: '' }
     const eventSource = new EventSource(`/api/generate?question=${encodeURIComponent(question)}&querys=${encodeURIComponent(querys)}&age=${age}&gender=${gender}`)
+    generateSourceRef.current = eventSource
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.uri.includes('quick-answer')) {
@@ -139,8 +147,10 @@ export default function Home() {
       }
     }
     eventSource.onerror = () => {
-      setGenerateError('内容生成失败，请检查网络后重试')
-      eventSource.close()
+      if (eventSource.readyState === EventSource.CLOSED) {
+        setGenerateError('内容生成失败，请检查网络后重试')
+        eventSource.close()
+      }
     }
     eventSource.addEventListener('finished', () => {
       eventSource.close()
