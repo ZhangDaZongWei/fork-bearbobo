@@ -51,6 +51,8 @@ export default function Home() {
   const [questions, setQuestions] = useState<{ questions: { question: string, query: string[] }[]}>({
     questions: [],
   })
+  const [searchError, setSearchError] = useState('')
+  const [generateError, setGenerateError] = useState('')
   const [quickAnswer, setQuickAnswer] = useState('')
   const [outline, setOutline] = useState<{
     outline: {
@@ -69,10 +71,9 @@ export default function Home() {
   })
 
   const handleSearch = async () => {
-    setQuestions({
-      questions: [],
-    })
-    const eventSource = new EventSource('/api/make-question?question=' + query)
+    setSearchError('')
+    setQuestions({ questions: [] })
+    const eventSource = new EventSource('/api/make-question?question=' + encodeURIComponent(query))
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
       const { uri, delta } = data;
@@ -90,20 +91,24 @@ export default function Home() {
         return next;
       });
     }
-
+    eventSource.onerror = () => {
+      setSearchError('问题拆解失败，请检查网络后重试')
+      eventSource.close()
+    }
     eventSource.addEventListener('finished', () => {
       eventSource.close();
     })
   }
 
   const handleQuickAnswer = async (question: string) => {
+    setGenerateError('')
     setQuickAnswer('')
     setOutline({ outline: { question: '', topics: [], introduction: '', cover_image: '' } })
     const questionItem = questions.questions.find(it => it.question === question)
     const querys = questionItem?.query.join(';') || ''
     let finalQuickAnswer = ''
     let finalOutline = { question: '', topics: [] as { topic: string }[], introduction: '', cover_image: '' }
-    const eventSource = new EventSource(`/api/generate?question=${question}&querys=${querys}&age=${age}&gender=${gender}`)
+    const eventSource = new EventSource(`/api/generate?question=${encodeURIComponent(question)}&querys=${encodeURIComponent(querys)}&age=${age}&gender=${gender}`)
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.uri.includes('quick-answer')) {
@@ -132,6 +137,10 @@ export default function Home() {
           return next;
         });
       }
+    }
+    eventSource.onerror = () => {
+      setGenerateError('内容生成失败，请检查网络后重试')
+      eventSource.close()
     }
     eventSource.addEventListener('finished', () => {
       eventSource.close()
@@ -185,6 +194,7 @@ export default function Home() {
       </div>
       <input type="text" value={query} onChange={e => setQuery(e.target.value)} />
       <button onClick={handleSearch}>Search</button>
+      {searchError && <p style={{ color: 'red' }}>{searchError}</p>}
       <div>
         {questions.questions.map((question) => (
           <div key={question.question}>
@@ -197,6 +207,7 @@ export default function Home() {
           </div>
         ))}
       </div>
+      {generateError && <p style={{ color: 'red' }}>{generateError}</p>}
       {
         quickAnswer && (
           <div>
